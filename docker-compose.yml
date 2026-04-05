@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: potaesm/hashcat-pdf-unlock:latest
+    image: potaesm/hashcat-pdf-unlocker:latest
     working_dir: /data
     gpus: all
     environment:
