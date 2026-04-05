@@ -12,8 +12,7 @@ RUN apt-get update \
 
 WORKDIR /opt
 
-RUN git clone --depth 1 https://github.com/tehw0lf/gpu-scatter-gather.git \
-    && git clone --depth 1 https://github.com/sighook/pdf2hashcat.git
+RUN git clone --depth 1 https://github.com/tehw0lf/gpu-scatter-gather.git
 
 WORKDIR /opt/gpu-scatter-gather
 
@@ -53,7 +52,7 @@ RUN apt-get update \
 
 COPY --from=hashcat-builder /opt/hashcat /opt/hashcat
 COPY --from=gsg-builder /opt/gpu-scatter-gather/target/release/gpu-scatter-gather /usr/local/bin/gpu-scatter-gather
-COPY --from=gsg-builder /opt/pdf2hashcat/pdf2hashcat.py /opt/pdf2hashcat/pdf2hashcat.py
+COPY vendor/pdf2hashcat.py /opt/pdf2hashcat/pdf2hashcat.py
 COPY scripts/unlock-pdf.sh /usr/local/bin/unlock-pdf
 
 RUN printf '%s\n' \

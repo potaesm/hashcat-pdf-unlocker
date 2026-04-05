@@ -77,6 +77,7 @@ extract_password() {
 	local hash_file="$1"
 	local mode="$2"
 	local password_line
+	local password
 
 	password_line="$(
 		hashcat \
@@ -87,7 +88,18 @@ extract_password() {
 			"$hash_file" 2>/dev/null | tail -n 1
 	)"
 
-	printf '%s\n' "$password_line"
+	if [[ "$password_line" =~ \(user\ password=(.*)\)$ ]]; then
+		password="${BASH_REMATCH[1]}"
+	elif [[ "$password_line" =~ \(owner\ password=(.*)\)$ ]]; then
+		password="${BASH_REMATCH[1]}"
+	elif [[ "$password_line" == *:* ]]; then
+		password="${password_line#*:}"
+	else
+		password="$password_line"
+	fi
+
+	password="${password%"${password##*[![:space:]]}"}"
+	printf '%s\n' "$password"
 }
 
 build_gsg_args() {
@@ -108,6 +120,21 @@ build_gsg_args() {
 	fi
 	if truthy "${GSG_DIGITS:-}"; then
 		out_ref+=("--digits")
+	fi
+}
+
+report_pdf_metadata() {
+	local pdf_path="$1"
+	local metadata
+
+	metadata="$(qpdf --show-encryption --password='' "$pdf_path" 2>&1 || true)"
+	if [[ -z "$metadata" ]]; then
+		metadata="$(qpdf --show-encryption "$pdf_path" 2>&1 || true)"
+	fi
+
+	if [[ -n "$metadata" ]]; then
+		echo "qpdf encryption metadata:" >&2
+		printf '%s\n' "$metadata" >&2
 	fi
 }
 
@@ -174,20 +201,6 @@ if [[ ! -f "$PDF_PATH" ]]; then
 	exit 1
 fi
 
-HASH_FILE="$WORK_DIR/$(basename "${PDF_PATH%.*}").hash"
-python3 /opt/pdf2hashcat/pdf2hashcat.py "$PDF_PATH" >"$HASH_FILE"
-
-if [[ ! -s "$HASH_FILE" ]]; then
-	echo "Failed to extract a crackable hash from $PDF_PATH" >&2
-	exit 1
-fi
-
-if [[ -n "${HASHCAT_MODE:-}" ]]; then
-	MODES=("$HASHCAT_MODE")
-else
-	mapfile -t MODES < <(detect_hashcat_modes_from_hash "$HASH_FILE")
-fi
-
 if [[ "$PDF_PATH" == "$INPUT_DIR/"* ]]; then
 	RELATIVE_PDF_PATH="${PDF_PATH#"$INPUT_DIR"/}"
 else
@@ -203,6 +216,21 @@ fi
 
 mkdir -p "$OUTPUT_DIR/$OUTPUT_REL_DIR"
 OUTPUT_PDF="$OUTPUT_DIR/$OUTPUT_REL_DIR/$OUTPUT_BASENAME"
+
+HASH_FILE="$WORK_DIR/$(basename "${PDF_PATH%.*}").hash"
+python3 /opt/pdf2hashcat/pdf2hashcat.py "$PDF_PATH" >"$HASH_FILE"
+
+if [[ ! -s "$HASH_FILE" ]]; then
+	report_pdf_metadata "$PDF_PATH"
+	echo "Failed to extract a crackable hash from $PDF_PATH" >&2
+	exit 1
+fi
+
+if [[ -n "${HASHCAT_MODE:-}" ]]; then
+	MODES=("$HASHCAT_MODE")
+else
+	mapfile -t MODES < <(detect_hashcat_modes_from_hash "$HASH_FILE")
+fi
 
 echo "Extracted hash file: $HASH_FILE"
 echo "Candidate hashcat modes: ${MODES[*]}"

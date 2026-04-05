@@ -48,51 +48,21 @@ Host machine gets:
   - unlocked PDF under output/
 ```
 
-### Pipeline exit behavior
-
-When `hashcat` finds the password, it can stop reading stdin before `gpu-scatter-gather` finishes producing candidates. That causes an expected broken-pipe exit on the generator side.
-
-The wrapper treats this as success as long as `hashcat` itself completed normally, then continues to potfile lookup and PDF decryption.
-
-### Progress visibility and runtime
-
-The wrapper enables `hashcat --status` and prints periodic status updates. You can change the interval with `HASHCAT_STATUS_TIMER`, for example:
+## Build
 
 ```bash
-docker compose run --rm \
-  -e HASHCAT_STATUS_TIMER=10 \
-  -e GSG_MASK='?1?1?1?1?1?1' \
-  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
-  pdf-unlock /data/input/example.pdf
+docker compose build
 ```
 
-Be careful with large masks. A 6-character mixed-case alphanumeric mask has `62^6 = 56,800,235,584` candidates. In this image, `hashcat -I` shows only a PoCL CPU OpenCL backend unless a real GPU OpenCL runtime is exposed into the container, so that search can take a very long time.
+## GPU prerequisite
 
-### CUDA runtime
-
-The runtime image is based on `nvidia/cuda:11.8.0-runtime-ubuntu20.04` and the Compose service requests `gpus: all`. To use CUDA acceleration, the host still needs a working NVIDIA driver plus `nvidia-container-toolkit` so Docker can pass the GPU through to the container.
-
-### Performance tuning
-
-The wrapper runs `hashcat` on the detected CUDA backend when available, but it does not automatically add aggressive tuning flags such as `-O` or `-w 4`.
-
-For this project, the most relevant optional flags are:
-
-- `-O` to enable optimized kernels
-- `-w 4` to use the highest workload profile
-
-You can pass them after the PDF path:
+This container is intended to use NVIDIA CUDA when available. Before running large searches, verify that the container can see your GPU:
 
 ```bash
-docker compose run --rm \
-  -e GSG_MASK='?1?1?1?1?1?1' \
-  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
-  pdf-unlock /data/input/example.pdf -O -w 4
+docker compose run --rm --entrypoint bash pdf-unlock -lc 'nvidia-smi && hashcat -I'
 ```
 
-Use `-O` only if your candidate lengths fit the optimized kernel limits for the selected hash mode. For the 6-character masks shown in this README, that is typically a good fit.
-
-`-D 2` is not recommended here. In current hashcat versions, `-D` is for OpenCL device types, while this container is configured to use hashcat's CUDA backend directly when it is available. If `hashcat -I` already shows a CUDA device, you generally do not need `-D` or `-d` unless you are forcing a specific device selection.
+`hashcat -I` should show a CUDA backend device, not just CPU/OpenCL fallback output.
 
 ### What each tool is responsible for
 
@@ -131,12 +101,6 @@ That means candidate passwords are streamed directly into `hashcat` through stan
 
 This keeps the container simple and avoids managing large intermediate files.
 
-## Build
-
-```bash
-docker compose build
-```
-
 ## Run with gpu-scatter-gather
 
 Put an encrypted file under `input/`, then run:
@@ -149,6 +113,15 @@ docker compose run --rm \
 ```
 
 This generates 6 lowercase-letter candidates. The container prints the recovered password and writes the unlocked copy to `output/` while preserving the relative path under `input/`.
+
+Additional `hashcat` flags can be passed after the PDF path. For example:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
+  pdf-unlock /data/input/example.pdf -O -w 4
+```
 
 ## Change the gpu-scatter-gather mask
 
