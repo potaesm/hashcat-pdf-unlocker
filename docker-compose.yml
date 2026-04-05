@@ -10,6 +10,7 @@ services:
       INPUT_DIR: /data/input
       OUTPUT_DIR: /data/output
       POTFILE_PATH: /work/hashcat.potfile
+      HASHCAT_DIRECT_MASK: "true"
       HASHCAT_STATUS_TIMER: "10"
       OUTPUT_SUFFIX: ""
       NVIDIA_VISIBLE_DEVICES: all

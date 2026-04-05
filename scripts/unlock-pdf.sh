@@ -18,6 +18,7 @@ Environment:
   GSG_DIGITS=true                     Use built-in digits charset
   HASHCAT_MODE=10500                  Force a specific hashcat mode
   HASHCAT_STATUS_TIMER=30             Print hashcat status every N seconds
+  HASHCAT_DIRECT_MASK=true            Let hashcat generate mask candidates directly
 EOF
 }
 
@@ -123,6 +124,38 @@ build_gsg_args() {
 	fi
 }
 
+build_hashcat_charset() {
+	local charset_id="$1"
+	local charset_var=""
+	local charset=""
+
+	case "$charset_id" in
+	1) charset_var="${GSG_CHARSET1:-}" ;;
+	2) charset_var="${GSG_CHARSET2:-}" ;;
+	3) charset_var="${GSG_CHARSET3:-}" ;;
+	4) charset_var="${GSG_CHARSET4:-}" ;;
+	*) return 1 ;;
+	esac
+
+	if [[ -n "$charset_var" ]]; then
+		charset+="$charset_var"
+	fi
+
+	if [[ "$charset_id" == "1" ]]; then
+		if truthy "${GSG_LOWERCASE:-}"; then
+			charset+='?l'
+		fi
+		if truthy "${GSG_UPPERCASE:-}"; then
+			charset+='?u'
+		fi
+		if truthy "${GSG_DIGITS:-}"; then
+			charset+='?d'
+		fi
+	fi
+
+	printf '%s\n' "$charset"
+}
+
 report_pdf_metadata() {
 	local pdf_path="$1"
 	local metadata
@@ -135,6 +168,48 @@ report_pdf_metadata() {
 	if [[ -n "$metadata" ]]; then
 		echo "qpdf encryption metadata:" >&2
 		printf '%s\n' "$metadata" >&2
+	fi
+}
+
+run_hashcat_direct_mask() {
+	local hash_file="$1"
+	local mode="$2"
+	shift 2
+	local extra_args=("$@")
+	local status_timer
+	local -a mask_args
+	local charset
+	local id
+	local status
+
+	status_timer="${HASHCAT_STATUS_TIMER:-30}"
+	mask_args=()
+
+	for id in 1 2 3 4; do
+		charset="$(build_hashcat_charset "$id")"
+		if [[ -n "$charset" ]]; then
+			mask_args+=("-$id" "$charset")
+		fi
+	done
+
+	set +e
+	hashcat \
+		--potfile-path "$POTFILE_PATH" \
+		--backend-ignore-hip \
+		--outfile-autohex-disable \
+		--status \
+		--status-timer "$status_timer" \
+		-m "$mode" \
+		-a 3 \
+		"${mask_args[@]}" \
+		"$hash_file" \
+		"${GSG_MASK}" \
+		"${extra_args[@]}"
+	status=$?
+	set -e
+
+	if [[ "$status" -ne 0 && "$status" -ne 1 ]]; then
+		exit "$status"
 	fi
 }
 
@@ -252,7 +327,11 @@ fi
 
 for MODE in "${MODES[@]}"; do
 	echo "Trying hashcat mode: $MODE"
-	run_hashcat_gsg "$HASH_FILE" "$MODE" "${HASHCAT_EXTRA_ARGS[@]}"
+	if truthy "${HASHCAT_DIRECT_MASK:-false}"; then
+		run_hashcat_direct_mask "$HASH_FILE" "$MODE" "${HASHCAT_EXTRA_ARGS[@]}"
+	else
+		run_hashcat_gsg "$HASH_FILE" "$MODE" "${HASHCAT_EXTRA_ARGS[@]}"
+	fi
 
 	PASSWORD="$(extract_password "$HASH_FILE" "$MODE")"
 	if [[ -z "$PASSWORD" ]]; then
