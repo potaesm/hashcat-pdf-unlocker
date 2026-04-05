@@ -5,13 +5,15 @@ services:
       dockerfile: Dockerfile
     image: potaesm/hashcat-pdf-unlock:latest
     working_dir: /data
-    stdin_open: true
-    tty: true
+    gpus: all
     environment:
       INPUT_DIR: /data/input
       OUTPUT_DIR: /data/output
       POTFILE_PATH: /work/hashcat.potfile
+      HASHCAT_STATUS_TIMER: "10"
       OUTPUT_SUFFIX: ""
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     volumes:
       - ./input:/data/input
       - ./output:/data/output
@@ -22,4 +24,4 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [compute, utility]

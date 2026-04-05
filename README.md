@@ -22,13 +22,12 @@ Container entrypoint: unlock-pdf
   |
   | 1. Read mounted PDF from /data/input
   |
-  | 2. qpdf --show-encryption
-  |    -> inspect PDF encryption revision
-  |    -> choose hashcat mode such as 10400 / 10500 / 25400 / 10600 / 10700
-  |
-  | 3. pdf2hashcat.py example.pdf > /work/example.hash
+  | 2. pdf2hashcat.py example.pdf > /work/example.hash
   |    -> extract the PDF's password-verification data
   |    -> write a hashcat-compatible hash file
+  |
+  | 3. inspect the $pdf$... signature
+  |    -> choose hashcat mode such as 10400 / 10500 / 25400 / 10600 / 10700
   |
   | 4. gpu-scatter-gather ... GSG_MASK ...
   |    -> generate candidate passwords on stdout
@@ -49,24 +48,70 @@ Host machine gets:
   - unlocked PDF under output/
 ```
 
+### Pipeline exit behavior
+
+When `hashcat` finds the password, it can stop reading stdin before `gpu-scatter-gather` finishes producing candidates. That causes an expected broken-pipe exit on the generator side.
+
+The wrapper treats this as success as long as `hashcat` itself completed normally, then continues to potfile lookup and PDF decryption.
+
+### Progress visibility and runtime
+
+The wrapper enables `hashcat --status` and prints periodic status updates. You can change the interval with `HASHCAT_STATUS_TIMER`, for example:
+
+```bash
+docker compose run --rm \
+  -e HASHCAT_STATUS_TIMER=10 \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
+  pdf-unlock /data/input/example.pdf
+```
+
+Be careful with large masks. A 6-character mixed-case alphanumeric mask has `62^6 = 56,800,235,584` candidates. In this image, `hashcat -I` shows only a PoCL CPU OpenCL backend unless a real GPU OpenCL runtime is exposed into the container, so that search can take a very long time.
+
+### CUDA runtime
+
+The runtime image is based on `nvidia/cuda:11.8.0-runtime-ubuntu20.04` and the Compose service requests `gpus: all`. To use CUDA acceleration, the host still needs a working NVIDIA driver plus `nvidia-container-toolkit` so Docker can pass the GPU through to the container.
+
+### Performance tuning
+
+The wrapper runs `hashcat` on the detected CUDA backend when available, but it does not automatically add aggressive tuning flags such as `-O` or `-w 4`.
+
+For this project, the most relevant optional flags are:
+
+- `-O` to enable optimized kernels
+- `-w 4` to use the highest workload profile
+
+You can pass them after the PDF path:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
+  pdf-unlock /data/input/example.pdf -O -w 4
+```
+
+Use `-O` only if your candidate lengths fit the optimized kernel limits for the selected hash mode. For the 6-character masks shown in this README, that is typically a good fit.
+
+`-D 2` is not recommended here. In current hashcat versions, `-D` is for OpenCL device types, while this container is configured to use hashcat's CUDA backend directly when it is available. If `hashcat -I` already shows a CUDA device, you generally do not need `-D` or `-d` unless you are forcing a specific device selection.
+
 ### What each tool is responsible for
 
 - `pdf2hashcat` does not crack anything. It reads the encrypted PDF structure and converts the relevant encryption fields into the `$pdf$...` hash format that `hashcat` expects.
 - `gpu-scatter-gather` does not know anything about PDFs. Its job is only to generate candidate passwords efficiently from a mask like `?1?1?1?1?1?1`.
 - `hashcat` is the component that actually tests candidates against the extracted PDF hash and determines whether a candidate is correct.
-- `qpdf` is used twice: first to inspect the PDF encryption so the wrapper can choose the correct `hashcat` mode, and later to decrypt the original PDF using the recovered password.
+- `qpdf` is used only after a password is recovered, to verify it and write the decrypted PDF.
 
 ### Why the hashcat mode matters
 
-`hashcat` needs to know which PDF encryption scheme it is attacking. Different PDF revisions map to different `hashcat` modes. The wrapper script calls `qpdf --show-encryption`, extracts the revision `R`, and maps it to a mode before cracking starts.
+`hashcat` needs to know which PDF encryption scheme it is attacking. Different `pdf2hashcat` signatures map to different `hashcat` modes, so the wrapper inspects the extracted `$pdf$...` line before cracking starts.
 
 In practice the flow is:
 
-- `R=2` -> `10400`
-- `R=3` or `R=4` without AES -> `10500`
-- `R=3` or `R=4` with AES -> `25400`
-- `R=5` -> `10600`
-- `R=6` -> `10700`
+- `$pdf$1*2*40*...` -> `10400`
+- `$pdf$1*3*40*...` -> `10510`
+- `$pdf$2*3*128*...` or `$pdf$2*4*128*...` -> try `25400`, then `10500`
+- `$pdf$5*5*256*...` -> `10600`
+- `$pdf$5*6*256*...` -> `10700`
 
 If this mapping is wrong, `hashcat` will test candidates against the wrong algorithm and never find the password even if the candidate generator is correct.
 
