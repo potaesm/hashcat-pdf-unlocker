@@ -152,7 +152,7 @@ run_hashcat_gsg() {
 
 	set +e
 	set +o pipefail
-	gpu-scatter-gather "${gsg_args[@]}" "${GSG_MASK}" |
+	gpu-scatter-gather "${gsg_args[@]}" "${GSG_MASK}" 2>"$WORK_DIR/gpu-scatter-gather.stderr" |
 		hashcat \
 			--potfile-path "$POTFILE_PATH" \
 			--backend-ignore-hip \
@@ -167,6 +167,13 @@ run_hashcat_gsg() {
 	status=$?
 	set -o pipefail
 	set -e
+
+	if [[ -s "$WORK_DIR/gpu-scatter-gather.stderr" ]]; then
+		if ! grep -q 'Broken pipe (os error 32)' "$WORK_DIR/gpu-scatter-gather.stderr"; then
+			cat "$WORK_DIR/gpu-scatter-gather.stderr" >&2
+		fi
+		rm -f "$WORK_DIR/gpu-scatter-gather.stderr"
+	fi
 
 	if [[ "$status" -ne 0 && "$status" -ne 1 ]]; then
 		exit "$status"

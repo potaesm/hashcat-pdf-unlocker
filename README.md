@@ -1,4 +1,4 @@
-# hashcat-pdf-unlock
+# Hashcat PDF Unlocker
 
 This project builds a container that combines:
 
