@@ -92,15 +92,18 @@ This keeps the container simple and avoids managing large intermediate files.
 docker compose build
 ```
 
-## Run with the default gpu-scatter-gather attack
+## Run with gpu-scatter-gather
 
 Put an encrypted file under `input/`, then run:
 
 ```bash
-docker compose run --rm pdf-unlock /data/input/example.pdf
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_LOWERCASE=true \
+  pdf-unlock /data/input/example.pdf
 ```
 
-By default this uses `gpu-scatter-gather` with the mask `?1?1?1?1?1?1` and `GSG_LOWERCASE=true`. The container prints the recovered password and writes the unlocked copy to `output/` while preserving the relative path under `input/`.
+This generates 6 lowercase-letter candidates. The container prints the recovered password and writes the unlocked copy to `output/` while preserving the relative path under `input/`.
 
 ## Change the gpu-scatter-gather mask
 
@@ -111,6 +114,151 @@ docker compose run --rm \
   -e GSG_MASK='?1?1?1?1?1?1?1?1' \
   -e GSG_LOWERCASE=true \
   pdf-unlock /data/input/example.pdf
+```
+
+## How to use masks
+
+`GSG_MASK` tells `gpu-scatter-gather` what kind of candidate passwords to generate.
+
+### Basic idea
+
+Each `?N` means:
+
+- use charset `N` for this position
+
+So:
+
+- `?1?1?1?1?1?1` means 6 characters, all using charset 1
+- `?1?2?1?2` means positions 1 and 3 use charset 1, while positions 2 and 4 use charset 2
+
+This project's wrapper currently supports custom charsets `1` through `4`:
+
+- `GSG_CHARSET1`
+- `GSG_CHARSET2`
+- `GSG_CHARSET3`
+- `GSG_CHARSET4`
+
+It also supports built-in charsets:
+
+- `GSG_LOWERCASE=true` assigns lowercase letters to `charset 1`
+- `GSG_UPPERCASE=true` assigns uppercase letters to `charset 1`
+- `GSG_DIGITS=true` assigns digits to `charset 1`
+
+In other words, the built-in switches in this wrapper all target `charset 1`.
+
+### Important rule
+
+If you set both a custom charset and a built-in charset for the same ID, the built-in one wins in the current wrapper logic. For example, if you set both `GSG_CHARSET1=abc123` and `GSG_LOWERCASE=true`, charset 1 will end up as lowercase only.
+
+So when using `GSG_CHARSET1`, `GSG_CHARSET2`, `GSG_CHARSET3`, or `GSG_CHARSET4`, avoid setting conflicting built-in variables.
+
+Also, the built-in charset switches conflict with each other in the current wrapper because they all target `charset 1`.
+
+That means this is not valid if your intent is to combine them:
+
+- `GSG_LOWERCASE=true`
+- `GSG_UPPERCASE=true`
+- `GSG_DIGITS=true`
+
+In practice, the last one applied wins for `charset 1`, so they do not merge into one combined alphanumeric charset.
+
+If you want lowercase + uppercase + digits together, define a custom charset explicitly instead of combining the built-in flags.
+
+### Examples
+
+6 lowercase letters:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_LOWERCASE=true \
+  pdf-unlock /data/input/example.pdf
+```
+
+6 digits:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_DIGITS=true \
+  pdf-unlock /data/input/example.pdf
+```
+
+4 lowercase letters followed by 2 digits:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?2?2' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyz' \
+  -e GSG_CHARSET2='0123456789' \
+  pdf-unlock /data/input/example.pdf
+```
+
+6 lowercase alphanumeric characters:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyz0123456789' \
+  pdf-unlock /data/input/example.pdf
+```
+
+6 mixed-case alphanumeric characters:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' \
+  pdf-unlock /data/input/example.pdf
+```
+
+What not to do for mixed-case alphanumeric:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?1?1?1?1?1' \
+  -e GSG_LOWERCASE=true \
+  -e GSG_UPPERCASE=true \
+  -e GSG_DIGITS=true \
+  pdf-unlock /data/input/example.pdf
+```
+
+Alternate letter-digit pattern, such as `a1b2c3`:
+
+```bash
+docker compose run --rm \
+  -e GSG_MASK='?1?2?1?2?1?2' \
+  -e GSG_CHARSET1='abcdefghijklmnopqrstuvwxyz' \
+  -e GSG_CHARSET2='0123456789' \
+  pdf-unlock /data/input/example.pdf
+```
+
+### Mental model
+
+Think of the mask as a template:
+
+```text
+?1?1?2?2
+```
+
+And think of the charsets as the allowed values for each placeholder:
+
+```text
+?1 = abcdefghijklmnopqrstuvwxyz
+?2 = 0123456789
+```
+
+That template would generate candidates like:
+
+```text
+aa00
+aa01
+aa02
+...
+ab00
+ab01
+...
+zz99
 ```
 
 ## Notes

@@ -4,10 +4,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential \
-        ca-certificates \
-        git \
-        pkg-config \
+    build-essential \
+    ca-certificates \
+    git \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
@@ -26,12 +26,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        hashcat \
-        ocl-icd-libopencl1 \
-        pocl-opencl-icd \
-        python3 \
-        qpdf \
+    ca-certificates \
+    hashcat \
+    ocl-icd-libopencl1 \
+    pocl-opencl-icd \
+    python3 \
+    qpdf \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=gsg-builder /opt/gpu-scatter-gather/target/release/gpu-scatter-gather /usr/local/bin/gpu-scatter-gather

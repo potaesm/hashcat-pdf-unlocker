@@ -29,8 +29,8 @@ require_cmd() {
 
 truthy() {
   case "${1:-}" in
-    1|true|TRUE|yes|YES|on|ON) return 0 ;;
-    *) return 1 ;;
+  1 | true | TRUE | yes | YES | on | ON) return 0 ;;
+  *) return 1 ;;
   esac
 }
 
@@ -49,27 +49,27 @@ detect_hashcat_mode() {
   fi
 
   case "$revision" in
-    2)
-      printf '10400\n'
-      ;;
-    3|4)
-      if printf '%s\n' "$encryption" | grep -qi 'AES'; then
-        printf '25400\n'
-      else
-        printf '10500\n'
-      fi
-      ;;
-    5)
-      printf '10600\n'
-      ;;
-    6)
-      printf '10700\n'
-      ;;
-    *)
-      echo "Unsupported or unknown PDF encryption revision: $revision" >&2
-      printf '%s\n' "$encryption" >&2
-      exit 1
-      ;;
+  2)
+    printf '10400\n'
+    ;;
+  3 | 4)
+    if printf '%s\n' "$encryption" | grep -qi 'AES'; then
+      printf '25400\n'
+    else
+      printf '10500\n'
+    fi
+    ;;
+  5)
+    printf '10600\n'
+    ;;
+  6)
+    printf '10700\n'
+    ;;
+  *)
+    echo "Unsupported or unknown PDF encryption revision: $revision" >&2
+    printf '%s\n' "$encryption" >&2
+    exit 1
+    ;;
   esac
 }
 
@@ -116,17 +116,17 @@ run_hashcat_gsg() {
   build_gsg_args gsg_args
 
   set +e
-  gpu-scatter-gather "${gsg_args[@]}" "${GSG_MASK}" \
-    | hashcat \
-        --potfile-path "$POTFILE_PATH" \
-        --backend-ignore-cuda \
-        --backend-ignore-hip \
-        --outfile-autohex-disable \
-        --stdin-timeout-abort=5 \
-        -m "$mode" \
-        -a 0 \
-        "$hash_file" \
-        "${extra_args[@]}"
+  gpu-scatter-gather "${gsg_args[@]}" "${GSG_MASK}" |
+    hashcat \
+      --potfile-path "$POTFILE_PATH" \
+      --backend-ignore-cuda \
+      --backend-ignore-hip \
+      --outfile-autohex-disable \
+      --stdin-timeout-abort=5 \
+      -m "$mode" \
+      -a 0 \
+      "$hash_file" \
+      "${extra_args[@]}"
   status=$?
   set -e
 
@@ -170,7 +170,7 @@ else
 fi
 
 HASH_FILE="$WORK_DIR/$(basename "${PDF_PATH%.*}").hash"
-python3 /opt/pdf2hashcat/pdf2hashcat.py "$PDF_PATH" > "$HASH_FILE"
+python3 /opt/pdf2hashcat/pdf2hashcat.py "$PDF_PATH" >"$HASH_FILE"
 
 if [[ ! -s "$HASH_FILE" ]]; then
   echo "Failed to extract a crackable hash from $PDF_PATH" >&2
