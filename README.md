@@ -5,7 +5,7 @@ This project builds a container that combines:
 - `pdf2hashcat` to extract PDF password hashes
 - `hashcat` to crack the password
 - `gpu-scatter-gather` to generate password candidates
-- `qpdf` to inspect the PDF encryption and decrypt the file once the password is known
+- `qpdf` to decrypt the file once the password is known
 
 ## How the tools work together
 
