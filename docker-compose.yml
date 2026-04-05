@@ -1,0 +1,27 @@
+services:
+  pdf-unlock:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: potaesm/hashcat-pdf-unlock:latest
+    working_dir: /data
+    stdin_open: true
+    tty: true
+    environment:
+      INPUT_DIR: /data/input
+      OUTPUT_DIR: /data/output
+      POTFILE_PATH: /work/hashcat.potfile
+      OUTPUT_SUFFIX: ""
+      GSG_MASK: "?1?1?1?1?1?1"
+      GSG_LOWERCASE: "true"
+    volumes:
+      - ./input:/data/input
+      - ./output:/data/output
+      - ./work:/work
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

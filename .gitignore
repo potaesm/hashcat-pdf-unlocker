@@ -1,0 +1,13 @@
+# Runtime data
+input/*
+output/*
+work/*
+
+# Keep directory structure
+!input/.gitkeep
+!output/.gitkeep
+!work/.gitkeep
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
